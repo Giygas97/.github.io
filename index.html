@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mi Colección Privada</title>
+  <style>
+    /* ESTILO IDÉNTICO A HOSTINGER (Capturas) */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      padding: 16px;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding-bottom: 80px;
+    }
+    /* Pantalla de Login */
+    #login-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #0b0b0b; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 1000;
+    }
+    #login-box {
+      background: #1a1a1a; padding: 30px; border-radius: 24px;
+      width: 90%; max-width: 320px; text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+    }
+    #login-box h2 { color: #fff; margin-bottom: 20px; font-weight: 400; letter-spacing: 2px; }
+    #pin-input {
+      width: 100%; padding: 16px; font-size: 24px; text-align: center;
+      background: #2a2a2a; border: 1px solid #444; color: white;
+      border-radius: 16px; outline: none; letter-spacing: 8px;
+    }
+    #login-btn {
+      margin-top: 20px; width: 100%; padding: 14px; background: #3a7bd5;
+      color: white; border: none; border-radius: 40px; font-size: 18px;
+      font-weight: bold; cursor: pointer; transition: 0.2s;
+    }
+    #login-btn:hover { background: #2b5ea7; }
+    #login-error { color: #ff6b6b; margin-top: 12px; font-size: 14px; }
+
+    /* App principal (oculta hasta login) */
+    #app { display: none; }
+
+    /* Header */
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    h1 { font-size: 26px; font-weight: 500; color: #f0f0f0; letter-spacing: -0.5px; }
+    .menu-icon { font-size: 30px; cursor: pointer; background: none; border: none; color: #ccc; }
+
+    /* Menú lateral */
+    #side-menu {
+      position: fixed; top: 0; left: -280px; width: 260px; height: 100%;
+      background: #1c1c1c; box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+      transition: 0.3s; z-index: 999; padding: 20px 0;
+    }
+    #side-menu.open { left: 0; }
+    #overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); z-index: 998; display: none;
+    }
+    #overlay.show { display: block; }
+    .menu-item {
+      display: block; padding: 18px 24px; color: #ddd; text-decoration: none;
+      font-size: 18px; border-bottom: 1px solid #2a2a2a;
+    }
+    .menu-item:hover { background: #2e2e2e; }
+
+    /* Tarjetas de resumen */
+    .stats-cards { display: flex; gap: 15px; margin-bottom: 30px; }
+    .stat-card {
+      background: #1e1e1e; padding: 20px; border-radius: 20px; flex: 1;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3); border-left: 6px solid #3a7bd5;
+    }
+    .stat-number { font-size: 42px; font-weight: bold; color: white; }
+    .stat-label { color: #aaa; margin-top: 5px; }
+    .trophy-badge { color: #ffd966; margin-left: 5px; }
+
+    /* Sección años */
+    .section-title {
+      font-size: 22px; margin: 30px 0 15px; padding-bottom: 8px;
+      border-bottom: 2px solid #333; color: #ddd;
+    }
+    .year-group { margin-bottom: 25px; }
+    .year-header { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: #ccc; }
+    .year-detail { color: #aaa; margin-bottom: 12px; font-style: italic; }
+
+    /* Vitrina de juegos (por plataforma) */
+    .platform-section {
+      background: #181818; border-radius: 20px; padding: 18px; margin-bottom: 30px;
+    }
+    .platform-header {
+      display: flex; justify-content: space-between; margin-bottom: 15px;
+      font-size: 20px; border-bottom: 1px solid #333; padding-bottom: 8px;
+    }
+    .game-card {
+      display: flex; align-items: center; gap: 15px; background: #222;
+      padding: 12px; border-radius: 16px; margin-bottom: 10px;
+    }
+    .game-cover {
+      width: 50px; height: 50px; object-fit: cover; border-radius: 10px;
+      background: #333;
+    }
+    .game-info { flex: 1; }
+    .game-title { font-size: 18px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .stars { color: #ffb83d; letter-spacing: 2px; margin-left: 8px; font-size: 14px; }
+    .game-meta { color: #999; font-size: 14px; margin-top: 4px; }
+    .delete-btn {
+      background: none; border: none; color: #777; font-size: 18px;
+      cursor: pointer; padding: 5px;
+    }
+
+    /* Formulario AGREGAR */
+    .form-group { margin-bottom: 20px; }
+    label { display: block; margin-bottom: 6px; color: #bbb; }
+    input, select {
+      width: 100%; padding: 14px; background: #252525; border: 1px solid #3a3a3a;
+      color: white; border-radius: 14px; font-size: 16px;
+    }
+    .star-rating { display: flex; gap: 6px; font-size: 30px; cursor: pointer; }
+    .star { color: #555; transition: 0.1s; }
+    .star.selected { color: #ffb83d; }
+    .checkbox-row { display: flex; align-items: center; gap: 12px; }
+    .save-btn {
+      background: #3a7bd5; color: white; border: none; padding: 16px;
+      width: 100%; border-radius: 40px; font-size: 18px; font-weight: bold;
+      cursor: pointer; margin-top: 10px;
+    }
+    .file-info { margin-top: 8px; font-size: 13px; color: #888; }
+
+    /* Vista Galería (igual a inicio pero sin contadores, opcional) */
+    .hidden-page { display: none; }
+    .visible-page { display: block; }
+
+    /* Responsive */
+    @media (max-width: 500px) {
+      .stats-cards { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div id="login-box">
+    <h2>🔐 ACCESO PRIVADO</h2>
+    <input type="password" id="pin-input" placeholder="••••" maxlength="4" inputmode="numeric">
+    <button id="login-btn">ENTRAR</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- APP PRINCIPAL -->
+<div id="app">
+  <div class="header">
+    <h1>🎮 Mi Colección</h1>
+    <button class="menu-icon" id="menu-toggle">☰</button>
+  </div>
+
+  <!-- CONTENEDORES DE PÁGINAS -->
+  <div id="page-home" class="visible-page">
+    <!-- Contadores dinámicos -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-number" id="total-games">0</div>
+        <div class="stat-label">Juegos terminados</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="total-100">0</div>
+        <div class="stat-label">Al 100% / Platino <span class="trophy-badge">🏆</span></div>
+      </div>
+    </div>
+
+    <!-- Resumen por año -->
+    <h2 class="section-title">📅 Resumen anual</h2>
+    <div id="year-summary"></div>
+
+    <!-- VITRINAS POR PLATAFORMA -->
+    <h2 class="section-title">🕹️ Por plataforma</h2>
+    <div id="platforms-container"></div>
+  </div>
+
+  <div id="page-gallery" class="hidden-page">
+    <h2 class="section-title">🖼️ Galería completa</h2>
+    <div id="gallery-container"></div>
+  </div>
+
+  <div id="page-add" class="hidden-page">
+    <h2 class="section-title">➕ Agregar juego</h2>
+    <div class="form-group">
+      <label>Título</label>
+      <input type="text" id="game-title" placeholder="Ej: The Last of Us">
+    </div>
+    <div class="form-group">
+      <label>Plataforma</label>
+      <select id="game-platform">
+        <option value="PS4">PS4</option>
+        <option value="PS5">PS5</option>
+        <option value="Xbox 360">Xbox 360</option>
+        <option value="Xbox One">Xbox One</option>
+        <option value="Xbox Series">Xbox Series</option>
+        <option value="PC">PC</option>
+        <option value="Nintendo Switch">Nintendo Switch</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Año terminado</label>
+      <input type="number" id="game-year" value="2024" min="1980" max="2030">
+    </div>
+    <div class="form-group">
+      <label>Calificación</label>
+      <div class="star-rating" id="star-rating">
+        <span class="star" data-value="0.5">☆</span><span class="star" data-value="1.0">☆</span>
+        <span class="star" data-value="1.5">☆</span><span class="star" data-value="2.0">☆</span>
+        <span class="star" data-value="2.5">☆</span><span class="star" data-value="3.0">☆</span>
+        <span class="star" data-value="3.5">☆</span><span class="star" data-value="4.0">☆</span>
+        <span class="star" data-value="4.5">☆</span><span class="star" data-value="5.0">☆</span>
+      </div>
+      <span id="rating-display">0.0 ★</span>
+    </div>
+    <div class="form-group checkbox-row">
+      <input type="checkbox" id="game-hundred"> <label style="display:inline;">🏆 Terminado al 100% / Platino</label>
+    </div>
+    <div class="form-group">
+      <label>Portada (desde tu PC)</label>
+      <input type="file" id="game-cover-file" accept="image/*">
+      <div class="file-info" id="file-info"></div>
+    </div>
+    <button class="save-btn" id="save-game">GUARDAR JUEGO</button>
+  </div>
+</div>
+
+<!-- MENÚ LATERAL -->
+<div id="side-menu">
+  <a href="#" class="menu-item" data-page="home">🏠 Inicio</a>
+  <a href="#" class="menu-item" data-page="gallery">🖼️ Galería</a>
+  <a href="#" class="menu-item" data-page="add">➕ Agregar juego</a>
+  <a href="#" class="menu-item" id="logout-btn">🚪 Cerrar Sesión</a>
+</div>
+<div id="overlay"></div>
+
+<script>
+  (function(){
+    "use strict";
+
+    // ---------- CONFIGURACIÓN PIN ----------
+    const SECRET_PIN = "1234"; // <<< CAMBIA ESTOS 4 DÍGITOS POR TU PIN
+
+    // ---------- ESTADO GLOBAL ----------
+    let games = []; // { id, title, platform, year, rating, hundred, coverDataURL }
+    let currentRating = 0.0;
+
+    // DOM elements
+    const loginScreen = document.getElementById('login-screen');
+    const appDiv = document.getElementById('app');
+    const pinInput = document.getElementById('pin-input');
+    const loginBtn = document.getElementById('login-btn');
+    const loginError = document.getElementById('login-error');
+    const sideMenu = document.getElementById('side-menu');
+    const overlay = document.getElementById('overlay');
+    const menuToggle = document.getElementById('menu-toggle');
+    const logoutBtn = document.getElementById('logout-btn');
+    const pages = {
+      home: document.getElementById('page-home'),
+      gallery: document.getElementById('page-gallery'),
+      add: document.getElementById('page-add')
+    };
+    const totalGamesSpan = document.getElementById('total-games');
+    const total100Span = document.getElementById('total-100');
+    const yearSummaryDiv = document.getElementById('year-summary');
+    const platformsContainer = document.getElementById('platforms-container');
+    const galleryContainer = document.getElementById('gallery-container');
+
+    // Form
+    const titleInput = document.getElementById('game-title');
+    const platformSelect = document.getElementById('game-platform');
+    const yearInput = document.getElementById('game-year');
+    const hundredCheck = document.getElementById('game-hundred');
+    const coverFileInput = document.getElementById('game-cover-file');
+    const fileInfo = document.getElementById('file-info');
+    const ratingDisplay = document.getElementById('rating-display');
+    const saveBtn = document.getElementById('save-game');
+
+    // ---------- UTILIDADES ----------
+    function loadGames() {
+      const stored = localStorage.getItem('vg_collection');
+      if(stored) {
+        try { games = JSON.parse(stored); } catch(e){ games = []; }
+      } else {
+        // Datos de ejemplo como en capturas
+        games = [
+          { id: '1', title: 'AEGIS WING', platform: 'Xbox 360', year: 2018, rating: 4.0, hundred: false, coverDataURL: '' },
+          { id: '2', title: 'Persona 5 Royale', platform: 'PS4', year: 2021, rating: 5.0, hundred: false, coverDataURL: '' },
+          { id: '3', title: 'MADERA OSCURA', platform: 'PS4', year: 2024, rating: 4.5, hundred: true, coverDataURL: '' }
+        ];
+      }
+    }
+    function saveGames() {
+      localStorage.setItem('vg_collection', JSON.stringify(games));
+    }
+
+    function renderAll() {
+      renderHome();
+      renderGallery();
+    }
+
+    // ---------- RENDER HOME ----------
+    function renderHome() {
+      const total = games.length;
+      const hundredCount = games.filter(g => g.hundred).length;
+      totalGamesSpan.textContent = total;
+      total100Span.textContent = hundredCount;
+
+      // Agrupar por año y plataforma
+      const yearMap = new Map(); // año -> { total, platforms: Map(platform -> count) }
+      games.forEach(g => {
+        const y = g.year;
+        if(!yearMap.has(y)) yearMap.set(y, { total: 0, platforms: new Map() });
+        const yd = yearMap.get(y);
+        yd.total++;
+        yd.platforms.set(g.platform, (yd.platforms.get(g.platform)||0) + 1);
+      });
+      const sortedYears = Array.from(yearMap.keys()).sort((a,b)=>a-b);
+      let summaryHtml = '';
+      sortedYears.forEach(year => {
+        const data = yearMap.get(year);
+        const platArray = Array.from(data.platforms.entries()).map(([p,c])=> `${p} (${c})`).join(' - ');
+        summaryHtml += `<div class="year-group">
+          <div class="year-header">${year}</div>
+          <div class="year-detail">${platArray} | Total: ${data.total}</div>
+        </div>`;
+      });
+      yearSummaryDiv.innerHTML = summaryHtml || '<p style="color:#777;">Aún no hay juegos.</p>';
+
+      // Vitrinas por plataforma (orden alfabético de plataforma, luego título)
+      const platformGroups = new Map();
+      games.forEach(g => {
+        if(!platformGroups.has(g.platform)) platformGroups.set(g.platform, []);
+        platformGroups.get(g.platform).push(g);
+      });
+      const sortedPlatforms = Array.from(platformGroups.keys()).sort();
+      let platHtml = '';
+      sortedPlatforms.forEach(plat => {
+        const gameList = platformGroups.get(plat).sort((a,b)=> a.title.localeCompare(b.title));
+        const totalPlat = gameList.length;
+        const hundredPlat = gameList.filter(g=>g.hundred).length;
+        platHtml += `<div class="platform-section">
+          <div class="platform-header">
+            <span>${plat}</span>
+            <span>Total: ${totalPlat} | 🏆 ${hundredPlat}</span>
+          </div>`;
+        gameList.forEach(g => {
+          const starsStr = '★'.repeat(Math.floor(g.rating)) + (g.rating%1? '½' : '');
+          platHtml += `<div class="game-card" data-id="${g.id}">
+            <img class="game-cover" src="${g.coverDataURL || 'https://via.placeholder.com/50/333/aaa?text=?'}" alt="cover">
+            <div class="game-info">
+              <div class="game-title">
+                ${g.title} ${g.hundred ? '🏆' : ''}
+                <span class="stars">${starsStr} (${g.rating.toFixed(1)})</span>
+              </div>
+              <div class="game-meta">${g.platform} · ${g.year}</div>
+            </div>
+            <button class="delete-btn" data-id="${g.id}" title="Eliminar">🗑️</button>
+          </div>`;
+        });
+        platHtml += '</div>';
+      });
+      platformsContainer.innerHTML = platHtml || '<p style="color:#777;">Agrega juegos para ver las vitrinas.</p>';
+
+      // Attach delete events
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.id;
+          games = games.filter(g => g.id !== id);
+          saveGames();
+          renderAll();
+        });
+      });
+    }
+
+    function renderGallery() {
+      const sorted = [...games].sort((a,b)=> a.title.localeCompare(b.title));
+      let html = '';
+      sorted.forEach(g => {
+        html += `<div class="game-card" style="margin-bottom:8px;">
+          <img class="game-cover" src="${g.coverDataURL || 'https://via.placeholder.com/50/333/aaa?text=?'}">
+          <div class="game-info"><strong>${g.title}</strong> · ${g.platform} · ${g.year} ${g.hundred?'🏆':''}</div>
+        </div>`;
+      });
+      galleryContainer.innerHTML = html || '<p>No hay juegos en galería.</p>';
+    }
+
+    // ---------- NAVEGACIÓN ----------
+    function showPage(pageId) {
+      Object.values(pages).forEach(p => p.classList.add('hidden-page'));
+      pages[pageId].classList.remove('hidden-page');
+      if(pageId === 'home') renderHome();
+      else if(pageId === 'gallery') renderGallery();
+      sideMenu.classList.remove('open');
+      overlay.classList.remove('show');
+    }
+
+    // ---------- AGREGAR JUEGO ----------
+    function resetForm() {
+      titleInput.value = '';
+      platformSelect.value = 'PS4';
+      yearInput.value = '2024';
+      hundredCheck.checked = false;
+      coverFileInput.value = '';
+      fileInfo.textContent = '';
+      setRating(0.0);
+    }
+
+    function setRating(val) {
+      currentRating = Math.round(val * 2) / 2;
+      ratingDisplay.textContent = currentRating.toFixed(1) + ' ★';
+      document.querySelectorAll('.star').forEach((star, index) => {
+        const starVal = parseFloat(star.dataset.value);
+        if(starVal <= currentRating) star.classList.add('selected');
+        else star.classList.remove('selected');
+      });
+    }
+
+    // Guardar imagen como DataURL
+    function handleCoverFile(file) {
+      return new Promise((resolve) => {
+        if(!file) { resolve(''); return; }
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ---------- INICIALIZACIÓN ----------
+    function init() {
+      loadGames();
+      
+      // Login
+      loginBtn.addEventListener('click', () => {
+        if(pinInput.value === SECRET_PIN) {
+          loginScreen.style.display = 'none';
+          appDiv.style.display = 'block';
+          renderAll();
+          pinInput.value = '';
+          loginError.textContent = '';
+        } else {
+          loginError.textContent = 'PIN incorrecto';
+        }
+      });
+      pinInput.addEventListener('keypress', (e) => { if(e.key==='Enter') loginBtn.click(); });
+
+      // Menú
+      menuToggle.addEventListener('click', () => {
+        sideMenu.classList.add('open');
+        overlay.classList.add('show');
+      });
+      overlay.addEventListener('click', () => {
+        sideMenu.classList.remove('open');
+        overlay.classList.remove('show');
+      });
+      document.querySelectorAll('[data-page]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          showPage(link.dataset.page);
+        });
+      });
+      logoutBtn.addEventListener('click', () => {
+        appDiv.style.display = 'none';
+        loginScreen.style.display = 'flex';
+        sideMenu.classList.remove('open');
+        overlay.classList.remove('show');
+      });
+
+      // Estrellas
+      document.querySelectorAll('.star').forEach(star => {
+        star.addEventListener('click', () => setRating(parseFloat(star.dataset.value)));
+      });
+      setRating(3.0); // default
+
+      coverFileInput.addEventListener('change', (e) => {
+        if(coverFileInput.files.length) fileInfo.textContent = coverFileInput.files[0].name;
+        else fileInfo.textContent = '';
+      });
+
+      // Guardar
+      saveBtn.addEventListener('click', async () => {
+        const title = titleInput.value.trim();
+        if(!title) { alert('Título requerido'); return; }
+        const platform = platformSelect.value;
+        const year = parseInt(yearInput.value);
+        const rating = currentRating;
+        const hundred = hundredCheck.checked;
+        
+        let coverDataURL = '';
+        if(coverFileInput.files.length) {
+          coverDataURL = await handleCoverFile(coverFileInput.files[0]);
+        }
+        
+        const newGame = {
+          id: Date.now() + '' + Math.floor(Math.random()*1000),
+          title, platform, year, rating, hundred, coverDataURL
+        };
+        games.push(newGame);
+        saveGames();
+        renderAll();
+        resetForm();
+        showPage('home');
+        alert('¡Juego agregado!');
+      });
+
+      // Cierre sesión si se cierra app? no necesario
+    }
+
+    init();
+  })();
+</script>
+</body>
+</html>
