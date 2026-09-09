@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>🎮 Mi Colección</title>
-  <link rel="manifest" href="data:application/manifest+json,{}">
-  <meta name="theme-color" content="#0f0f0f">
+  <title>🎮 Mi Colección Definitiva</title>
   <style>
     :root {
       --bg-image: none;
@@ -13,8 +11,8 @@
       --title-main-color: #f0f0f0;
       --title-summary-color: #ddd;
       --title-platforms-color: #ddd;
-      --badge-size: 32px;
       --accent-blue: #3a7bd5;
+      --badge-size: 32px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -118,9 +116,15 @@
       scroll-margin-top: 20px;
     }
     .platform-header {
-      display: flex; justify-content: space-between; margin-bottom: 15px;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 15px;
       font-size: 20px; border-bottom: 1px solid #444; padding-bottom: 8px;
     }
+    .platform-color-btn {
+      background: none; border: none; cursor: pointer; font-size: 18px;
+      color: #aaa; padding: 2px 6px; border-radius: 6px;
+    }
+    .platform-color-btn:hover { background: rgba(255,255,255,0.1); }
+    .platform-total { margin-left: auto; }
     .game-card {
       display: flex; align-items: center; gap: 15px; background: #222;
       padding: 12px; border-radius: 16px; margin-bottom: 10px;
@@ -179,7 +183,7 @@
       display: flex; align-items: center; gap: 10px;
       margin-bottom: 15px; flex-wrap: wrap;
     }
-    .size-btn {
+    .size-btn, .sort-select {
       background: #2a2a2a; color: #aaa; border: 1px solid #444;
       padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer;
     }
@@ -329,6 +333,11 @@
       <button class="size-btn" data-size="sm">Pequeño</button>
       <button class="size-btn active" data-size="md">Normal</button>
       <button class="size-btn" data-size="lg">Grande</button>
+      <select class="sort-select" id="mural-sort">
+        <option value="alpha">Alfabético</option>
+        <option value="platform">Por plataforma</option>
+        <option value="recent">Recientes</option>
+      </select>
       <span class="storage-indicator" id="storage-indicator">📊 Calculando...</span>
     </div>
     <div id="mural-wrapper">
@@ -345,6 +354,7 @@
   <a class="menu-item" data-page="mural">🏅 Mural</a>
   <a class="menu-item" id="add-game-btn">➕ Agregar juego</a>
   <a class="menu-item" id="customize-btn">🎨 Personalización</a>
+  <a class="menu-item" id="settings-btn">⚙️ Ajustes</a>
   <a class="menu-item" id="logout-btn">🚪 Cerrar Sesión</a>
 </div>
 <div id="overlay"></div>
@@ -362,12 +372,23 @@
     pc: ['#6A5ACD', '#9370DB'],
     default: '#3a7bd5'
   };
+  let customPlatformColors = JSON.parse(localStorage.getItem('vg_platform_colors') || '{}');
+
   function getPlatformFamily(p){ const x=p.toLowerCase(); if(x.includes('ps')||x.includes('playstation')||x.includes('psp')||x.includes('vita'))return'sony'; if(x.includes('xbox'))return'xbox'; if(x.includes('nintendo')||x.includes('ds')||x.includes('64')||x.includes('switch')||x.includes('gamecube')||x.includes('wii'))return'nintendo'; if(x.includes('pc')||x.includes('steam')||x.includes('epic'))return'pc'; return'default'; }
-  function getPlatformColor(p){ const f=getPlatformFamily(p); if(f==='default')return PLATFORM_COLORS.default; const c=PLATFORM_COLORS[f]; let h=0; for(let i=0;i<p.length;i++)h=((h<<5)-h)+p.charCodeAt(i); return c[Math.abs(h)%c.length]; }
+  function getPlatformColor(platform) {
+    if (customPlatformColors[platform]) return customPlatformColors[platform];
+    const family = getPlatformFamily(platform);
+    if (family === 'default') return PLATFORM_COLORS.default;
+    const colors = PLATFORM_COLORS[family];
+    let hash = 0;
+    for (let i=0; i<platform.length; i++) hash = ((hash<<5)-hash)+platform.charCodeAt(i);
+    return colors[Math.abs(hash) % colors.length];
+  }
 
   let games = [];
   let currentEditId = null;
   let currentBadgeSize = localStorage.getItem('vg_badge_size') || 'md';
+  let currentMuralSort = localStorage.getItem('vg_mural_sort') || 'alpha';
   let customBackground = localStorage.getItem('vg_bg') || '';
   let muralBackground = localStorage.getItem('vg_mural_bg') || '';
   let customTitles = JSON.parse(localStorage.getItem('vg_titles') || '{}');
@@ -378,6 +399,9 @@
   if(!customColors.main)customColors.main='#f0f0f0';
   if(!customColors.summary)customColors.summary='#ddd';
   if(!customColors.platforms)customColors.platforms='#ddd';
+
+  let directoryHandle = null;
+  let usingFileSystem = false;
 
   const loginScreen = document.getElementById('login-screen');
   const appDiv = document.getElementById('app');
@@ -392,14 +416,125 @@
   const musicPlayer = document.getElementById('music-player');
   let currentMusicTrack = null;
 
-  function loadGames(){
+  // ========== INICIALIZACIÓN ==========
+  async function initStorage() {
+    try {
+      const db = await openDB();
+      const tx = db.transaction('handles', 'readonly');
+      const store = tx.objectStore('handles');
+      const req = store.get('directory');
+      const handle = await new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
+      if (handle) { directoryHandle = handle; usingFileSystem = true; }
+    } catch(e) { console.log('No se pudo recuperar handle', e); }
+
+    if (usingFileSystem && directoryHandle) {
+      await loadFromFileSystem();
+    } else {
+      loadGamesFromLocalStorage();
+    }
+    applySettings();
+    updateStorageIndicator();
+  }
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('mi_coleccion_db', 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('handles')) db.createObjectStore('handles');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function connectDirectory() {
+    if (!window.showDirectoryPicker) { alert('Tu navegador no soporta esta función. Usa Chrome o Edge actualizados.'); return; }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      directoryHandle = handle;
+      usingFileSystem = true;
+      const db = await openDB();
+      const tx = db.transaction('handles', 'readwrite');
+      const store = tx.objectStore('handles');
+      store.put(handle, 'directory');
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      await saveToFileSystem();
+      alert('Carpeta conectada correctamente. Ahora todo se guardará en ella.');
+      location.reload();
+    } catch(e) { console.error('Error al conectar carpeta', e); }
+  }
+
+  async function disconnectDirectory() {
+    directoryHandle = null;
+    usingFileSystem = false;
+    const db = await openDB();
+    const tx = db.transaction('handles', 'readwrite');
+    const store = tx.objectStore('handles');
+    store.delete('directory');
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+    alert('Carpeta desconectada. Se usará el almacenamiento local.');
+    location.reload();
+  }
+
+  async function loadFromFileSystem() {
+    try {
+      const fileHandle = await directoryHandle.getFileHandle('data.json');
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      games = JSON.parse(text);
+    } catch(e) { console.log('No se encontró data.json, se usará lista vacía'); games = []; }
+  }
+
+  async function saveToFileSystem() {
+    if (!usingFileSystem || !directoryHandle) return;
+    try {
+      const json = JSON.stringify(games, null, 2);
+      const fileHandle = await directoryHandle.getFileHandle('data.json', { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+    } catch(e) { console.error('Error al guardar en carpeta', e); }
+  }
+
+  function loadGamesFromLocalStorage() {
     const stored = localStorage.getItem('vg_collection');
     if(stored){ try{ games = JSON.parse(stored); }catch(e){ games=[]; } }
-    applySettings(); updateStorageIndicator();
   }
-  function saveGames(){ localStorage.setItem('vg_collection', JSON.stringify(games)); updateStorageIndicator(); }
-  function getStorageUsed(){ let t=0; for(const k in localStorage){ if(localStorage.hasOwnProperty(k)&&k.startsWith('vg_')) t += localStorage.getItem(k).length*2; } return t; }
-  function updateStorageIndicator(){ const used=getStorageUsed(); const limit=100*1024*1024; const pct=(used/limit*100).toFixed(1); const mb=(used/(1024*1024)).toFixed(1); const el=document.getElementById('storage-indicator'); if(el)el.textContent=`📊 ${mb} MB (${pct}%)`; }
+
+  function saveGames() {
+    if (usingFileSystem) {
+      saveToFileSystem();
+      localStorage.setItem('vg_collection', JSON.stringify(games));
+    } else {
+      localStorage.setItem('vg_collection', JSON.stringify(games));
+    }
+    updateStorageIndicator();
+  }
+
+  function getStorageUsed() {
+    if (usingFileSystem) return 0;
+    let total = 0;
+    for(const key in localStorage){
+      if(localStorage.hasOwnProperty(key) && key.startsWith('vg_')) total += localStorage.getItem(key).length * 2;
+    }
+    return total;
+  }
+
+  function updateStorageIndicator() {
+    const used = getStorageUsed();
+    const limit = usingFileSystem ? Infinity : (100 * 1024 * 1024);
+    const el = document.getElementById('storage-indicator');
+    if (el) {
+      if (usingFileSystem) el.textContent = `📂 Carpeta conectada (ilimitado)`;
+      else {
+        const mb = (used / (1024*1024)).toFixed(1);
+        const pct = ((used / limit) * 100).toFixed(1);
+        el.textContent = `📊 ${mb} MB (${pct}%)`;
+      }
+    }
+  }
+
   function applySettings(){
     document.documentElement.style.setProperty('--bg-image', customBackground?`url('${customBackground}')`:'none');
     document.documentElement.style.setProperty('--mural-bg-image', muralBackground?`url('${muralBackground}')`:'none');
@@ -411,8 +546,10 @@
     document.documentElement.style.setProperty('--title-platforms-color', customColors.platforms);
     document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));
     const ab=document.querySelector(`.size-btn[data-size="${currentBadgeSize}"]`); if(ab)ab.classList.add('active');
+    document.getElementById('mural-sort').value = currentMuralSort;
   }
 
+  // ========== RENDER ==========
   function renderHome(){
     document.getElementById('total-games').textContent = games.length;
     document.getElementById('total-100').textContent = games.filter(g=>g.hundred).length;
@@ -421,15 +558,31 @@
     const years=Array.from(ym.keys()).sort((a,b)=>a-b);
     let sh=''; years.forEach(y=>{ const d=ym.get(y); const pa=Array.from(d.platforms.entries()).map(([p,c])=>`${p} (${c})`).join(' · '); sh+=`<div class="year-group"><div class="year-header">${y}</div><div class="year-detail">${pa} | Total: ${d.total}</div></div>`; });
     document.getElementById('year-summary').innerHTML = sh || '<p style="color:#777;">Aún no hay juegos.</p>';
+
     const pg=new Map(); games.forEach(g=>{ if(!pg.has(g.platform))pg.set(g.platform,[]); pg.get(g.platform).push(g); });
     const plats=Array.from(pg.keys()).sort();
     let qh=''; plats.forEach(p=>{ const c=getPlatformColor(p); qh+=`<button class="quick-nav-btn" data-platform="${p}" style="border-left:3px solid ${c};">${p}</button>`; });
     document.getElementById('quick-nav').innerHTML = qh;
     document.querySelectorAll('.quick-nav-btn').forEach(b=>{ b.addEventListener('click',()=>{ const sec=Array.from(document.querySelectorAll('.platform-section')).find(s=>s.querySelector('.platform-header span')?.textContent===b.dataset.platform); if(sec)sec.scrollIntoView({behavior:'smooth',block:'start'}); }); });
-    let ph=''; plats.forEach(p=>{ const list=pg.get(p).sort((a,b)=>a.title.localeCompare(b.title)); const tp=list.length; const hp=list.filter(g=>g.hundred).length; const c=getPlatformColor(p); ph+=`<div class="platform-section" id="platform-${p.replace(/\s+/g,'-')}"><div class="platform-header" style="color:${c};border-bottom-color:${c}40"><span>${p}</span><span>Total: ${tp} | 🏆 ${hp}</span></div>`; list.forEach(g=>{ ph+=renderGameCard(g); }); ph+='</div>'; });
+
+    let ph=''; plats.forEach(p=>{ const list=pg.get(p).sort((a,b)=>a.title.localeCompare(b.title)); const tp=list.length; const hp=list.filter(g=>g.hundred).length; const c=getPlatformColor(p);
+      ph+=`<div class="platform-section" id="platform-${p.replace(/\s+/g,'-')}"><div class="platform-header">
+        <button class="platform-color-btn" data-platform="${p}" title="Cambiar color">🎨</button>
+        <span>${p}</span>
+        <span class="platform-total">Total: ${tp} | 🏆 ${hp}</span>
+      </div>`;
+      list.forEach(g=>{ ph+=renderGameCard(g); }); ph+='</div>'; });
     document.getElementById('platforms-container').innerHTML = ph || '<p style="color:#777;">Agrega juegos para ver las vitrinas.</p>';
     attachCardEvents();
+    // Eventos para cambiar color de plataforma
+    document.querySelectorAll('.platform-color-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openColorPicker(btn.dataset.platform);
+      });
+    });
   }
+
   function renderGameCard(g){
     return `<div class="game-card" data-id="${g.id}">
       <img class="game-cover" src="${g.coverDataURL||'https://via.placeholder.com/60/333/aaa?text=🎮'}" alt="cover">
@@ -437,20 +590,34 @@
       <div class="game-actions"><button class="edit-btn" data-id="${g.id}">✏️</button><button class="delete-btn" data-id="${g.id}">🗑️</button></div>
     </div>`;
   }
+
   function formatStars(r){ const f=Math.floor(r); const h=r%1>=0.5?1:0; let s='★'.repeat(f); if(h)s+='⯨'; s+='☆'.repeat(5-f-h); return s; }
+
   function attachCardEvents(){
     document.querySelectorAll('.edit-btn').forEach(b=>{ b.addEventListener('click',e=>{ e.stopPropagation(); const g=games.find(x=>x.id===b.dataset.id); if(g)openGameModal(g); }); });
     document.querySelectorAll('.delete-btn').forEach(b=>{ b.addEventListener('click',e=>{ e.stopPropagation(); showDeleteConfirm(b.dataset.id); }); });
   }
+
   function renderGallery(){
     const pg=new Map(); games.forEach(g=>{ if(!pg.has(g.platform))pg.set(g.platform,[]); pg.get(g.platform).push(g); });
     const plats=Array.from(pg.keys()).sort(); let h='';
     plats.forEach(p=>{ const list=pg.get(p).sort((a,b)=>a.title.localeCompare(b.title)); const c=getPlatformColor(p); h+=`<div class="gallery-platform-group"><div class="gallery-platform-title" style="color:${c}">${p} (${list.length})</div><div class="gallery-grid">`; list.forEach(g=>{ h+=`<div class="gallery-item"><img src="${g.coverDataURL||'https://via.placeholder.com/140/333/aaa?text=🎮'}"><div class="gallery-item-title">${g.title} ${g.hundred?'🏆':''}</div><small>${formatStars(g.rating)}</small></div>`; }); h+='</div></div>'; });
     document.getElementById('gallery-container').innerHTML = h || '<p>No hay juegos.</p>';
   }
+
   function renderMural(){
-    const sorted=[...games].sort((a,b)=>a.title.localeCompare(b.title));
-    const c=document.getElementById('mural-container'); c.innerHTML='';
+    let sorted = [];
+    const sortMode = currentMuralSort;
+    if (sortMode === 'alpha') {
+      sorted = [...games].sort((a,b)=>a.title.localeCompare(b.title));
+    } else if (sortMode === 'platform') {
+      sorted = [...games].sort((a,b)=> a.platform.localeCompare(b.platform) || a.title.localeCompare(b.title));
+    } else if (sortMode === 'recent') {
+      sorted = [...games].sort((a,b)=> (b.id < a.id ? -1 : 1)); // id basado en timestamp
+    }
+
+    const container = document.getElementById('mural-container');
+    container.innerHTML = '';
     const sc='size-'+currentBadgeSize;
     sorted.forEach(g=>{
       const item=document.createElement('div'); item.className='mural-item'; item.dataset.id=g.id;
@@ -458,11 +625,12 @@
       else { const ph=document.createElement('div'); ph.className='mural-icon placeholder '+sc; ph.textContent='?'; item.appendChild(ph); }
       const nm=document.createElement('div'); nm.className='mural-name'; nm.textContent=g.title.length>15?g.title.substring(0,14)+'…':g.title; item.appendChild(nm);
       item.addEventListener('click',()=>openBadgeInfoModal(g));
-      c.appendChild(item);
+      container.appendChild(item);
     });
-    if(sorted.length===0)c.innerHTML='<p style="color:#777;width:100%;">Agrega juegos para ver el mural.</p>';
+    if(sorted.length===0)container.innerHTML='<p style="color:#777;width:100%;">Agrega juegos para ver el mural.</p>';
   }
 
+  // ========== MODALES ==========
   function openBadgeInfoModal(game){
     const hasC = game.characters && game.characters.length>0;
     const hasV = game.villains && game.villains.length>0;
@@ -563,6 +731,24 @@
     modalContainer.innerHTML=`<div class="modal-overlay" id="confirm-modal"><div class="modal confirm-dialog"><p>¿Seguro que deseas eliminar este juego?</p><div class="confirm-actions"><button class="btn-confirm" id="confirm-delete">Sí, eliminar</button><button class="btn-cancel" onclick="this.closest('.modal-overlay').remove()">Cancelar</button></div></div></div>`;
     document.getElementById('confirm-delete').addEventListener('click',()=>{ games=games.filter(g=>g.id!==id); saveGames(); renderHome(); renderGallery(); renderMural(); closeModal(); });
   }
+
+  function openColorPicker(platform) {
+    const current = getPlatformColor(platform);
+    modalContainer.innerHTML = `<div class="modal-overlay" id="color-picker-modal"><div class="modal">
+      <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+      <h2>🎨 Color de ${platform}</h2>
+      <div class="form-group"><label>Selecciona color</label><input type="color" id="platform-color-input" value="${current}"></div>
+      <button class="save-btn" id="save-platform-color">GUARDAR COLOR</button>
+    </div></div>`;
+    document.getElementById('save-platform-color').addEventListener('click',()=>{
+      const color = document.getElementById('platform-color-input').value;
+      customPlatformColors[platform] = color;
+      localStorage.setItem('vg_platform_colors', JSON.stringify(customPlatformColors));
+      closeModal();
+      renderHome(); renderGallery(); renderMural();
+    });
+  }
+
   function openCustomizeModal(){
     modalContainer.innerHTML=`<div class="modal-overlay" id="customize-modal"><div class="modal">
       <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
@@ -591,19 +777,78 @@
       localStorage.setItem('vg_titles',JSON.stringify(customTitles)); localStorage.setItem('vg_title_colors',JSON.stringify(customColors)); applySettings(); closeModal();
     });
   }
+
+  function openSettingsModal(){
+    modalContainer.innerHTML=`<div class="modal-overlay" id="settings-modal"><div class="modal">
+      <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+      <h2>⚙️ Ajustes</h2>
+      <h3 style="margin-top:20px;color:#ccc;">📂 Carpeta de datos</h3>
+      <div class="form-group">
+        <p style="color:#aaa;font-size:14px;">Conecta una carpeta para almacenamiento ilimitado. Si no conectas, se usará el almacenamiento local.</p>
+        <button class="save-btn" id="connect-directory-btn">Conectar carpeta</button>
+        <button class="save-btn" id="disconnect-directory-btn" style="background:#555;">Desconectar carpeta</button>
+        <p id="directory-status" style="margin-top:8px;color:#888;"></p>
+      </div>
+      <h3 style="margin-top:30px;color:#ccc;">💾 Copia de seguridad</h3>
+      <p style="color:#aaa;margin-bottom:15px;">Descarga un archivo con toda tu colección o restaura desde un archivo anterior.</p>
+      <button class="save-btn" id="export-backup">📤 Exportar backup</button>
+      <button class="save-btn" id="import-backup" style="background:#444;">📥 Importar backup</button>
+      <input type="file" id="import-file" accept=".json" style="display:none;">
+      <div id="backup-status" style="margin-top:10px;color:#aaa;"></div>
+    </div></div>`;
+
+    // Estado carpeta
+    const statusEl = document.getElementById('directory-status');
+    if (usingFileSystem) statusEl.textContent = '✅ Carpeta conectada: ' + (directoryHandle?.name || 'desconocida');
+    else statusEl.textContent = 'ℹ️ No hay carpeta conectada. Usando almacenamiento local.';
+
+    document.getElementById('connect-directory-btn').addEventListener('click', async () => { await connectDirectory(); });
+    document.getElementById('disconnect-directory-btn').addEventListener('click', async () => { await disconnectDirectory(); });
+
+    // Backup
+    document.getElementById('export-backup').addEventListener('click',()=>{
+      const data = JSON.stringify(games, null, 2);
+      const blob = new Blob([data], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mi_coleccion_backup.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      document.getElementById('backup-status').textContent = '✅ Backup exportado correctamente.';
+    });
+    document.getElementById('import-backup').addEventListener('click',()=>{ document.getElementById('import-file').click(); });
+    document.getElementById('import-file').addEventListener('change',async(e)=>{
+      const file = e.target.files[0];
+      if(file){
+        try{
+          const text = await file.text();
+          games = JSON.parse(text);
+          saveGames();
+          renderHome(); renderGallery(); renderMural();
+          document.getElementById('backup-status').textContent = '✅ Backup importado.';
+        }catch(err){
+          document.getElementById('backup-status').textContent = '❌ Error al importar: archivo no válido.';
+        }
+      }
+    });
+  }
+
   function closeModal(){ modalContainer.innerHTML=''; }
   function showPage(id){ Object.values(pages).forEach(p=>p.classList.add('hidden-page')); pages[id].classList.remove('hidden-page'); pages[id].classList.add('visible-page'); if(id==='home')renderHome(); else if(id==='gallery')renderGallery(); else if(id==='mural'){renderMural();updateStorageIndicator();} sideMenu.classList.remove('open'); overlay.classList.remove('show'); window.scrollTo({top:0,behavior:'smooth'}); }
 
   function init(){
-    loadGames();
+    (async()=>{ await initStorage(); renderHome(); })();
     loginBtn.addEventListener('click',()=>{ if(pinInput.value===SECRET_PIN){ loginScreen.style.display='none'; appDiv.style.display='block'; renderHome(); pinInput.value=''; loginError.textContent=''; } else loginError.textContent='PIN incorrecto'; });
     pinInput.addEventListener('keypress',e=>{ if(e.key==='Enter')loginBtn.click(); });
     menuToggle.addEventListener('click',()=>{ sideMenu.classList.add('open'); overlay.classList.add('show'); });
     overlay.addEventListener('click',()=>{ sideMenu.classList.remove('open'); overlay.classList.remove('show'); });
     document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',e=>{ e.preventDefault(); showPage(el.dataset.page); }));
     document.querySelectorAll('.size-btn').forEach(b=>b.addEventListener('click',()=>{ currentBadgeSize=b.dataset.size; localStorage.setItem('vg_badge_size',currentBadgeSize); applySettings(); renderMural(); }));
+    document.getElementById('mural-sort').addEventListener('change',(e)=>{ currentMuralSort = e.target.value; localStorage.setItem('vg_mural_sort', currentMuralSort); renderMural(); });
     document.getElementById('add-game-btn').addEventListener('click',()=>{ openGameModal(); sideMenu.classList.remove('open'); overlay.classList.remove('show'); });
     document.getElementById('customize-btn').addEventListener('click',()=>{ openCustomizeModal(); sideMenu.classList.remove('open'); overlay.classList.remove('show'); });
+    document.getElementById('settings-btn').addEventListener('click',()=>{ openSettingsModal(); sideMenu.classList.remove('open'); overlay.classList.remove('show'); });
     document.getElementById('logout-btn').addEventListener('click',()=>{ appDiv.style.display='none'; loginScreen.style.display='flex'; sideMenu.classList.remove('open'); overlay.classList.remove('show'); });
     const sb=document.getElementById('scroll-top'); window.addEventListener('scroll',()=>{ if(window.scrollY>300)sb.classList.add('show'); else sb.classList.remove('show'); }); sb.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
   }
